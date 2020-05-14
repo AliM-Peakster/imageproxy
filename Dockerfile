@@ -13,8 +13,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -v ./cmd/imageproxy
 
-FROM alpine:3.8
-RUN apk update && apk add pngquant jpegoptim libwebp-tools
+FROM scratch
 
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
