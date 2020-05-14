@@ -24,6 +24,8 @@ import (
 	"io"
 	"log"
 	"math"
+	"os/exec"
+	"strings"
 
 	"github.com/disintegration/imaging"
 	"github.com/muesli/smartcrop"
@@ -74,12 +76,13 @@ func Transform(img []byte, opt Options) ([]byte, error) {
 		format = "jpeg"
 	}
 
-	if opt.Format != "" {
+	if opt.Format != "" && opt.Format != "webp" {
 		format = opt.Format
 	}
 
 	// transform and encode image
 	buf := new(bytes.Buffer)
+	var outputBytes []byte
 	switch format {
 	case "bmp":
 		m = transformImage(m, opt)
@@ -87,6 +90,7 @@ func Transform(img []byte, opt Options) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		outputBytes = buf.Bytes()
 	case "gif":
 		fn := func(img image.Image) image.Image {
 			return transformImage(img, opt)
@@ -95,6 +99,7 @@ func Transform(img []byte, opt Options) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		outputBytes = buf.Bytes()
 	case "jpeg":
 		quality := opt.Quality
 		if quality == 0 {
@@ -106,11 +111,23 @@ func Transform(img []byte, opt Options) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		if opt.Format == optFormatWebp {
+			fileBytes := buf.Bytes()
+			outputBytes, err = ConvertToWebP(fileBytes)
+		} else {
+			outputBytes = buf.Bytes()
+		}
 	case "png":
 		m = transformImage(m, opt)
 		err = png.Encode(buf, m)
 		if err != nil {
 			return nil, err
+		}
+		if opt.Format == optFormatWebp {
+			fileBytes := buf.Bytes()
+			outputBytes, err = ConvertToWebP(fileBytes)
+		} else {
+			outputBytes = buf.Bytes()
 		}
 	case "tiff":
 		m = transformImage(m, opt)
@@ -118,11 +135,11 @@ func Transform(img []byte, opt Options) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		outputBytes = buf.Bytes()
 	default:
 		return nil, fmt.Errorf("unsupported format: %v", format)
 	}
-
-	return buf.Bytes(), nil
+	return outputBytes, nil
 }
 
 // evaluateFloat interprets the option value f. If f is between 0 and 1, it is
@@ -270,6 +287,21 @@ func exifOrientation(r io.Reader) (opt Options) {
 		opt.Rotate = 90
 	}
 	return opt
+}
+
+func ConvertToWebP(input []byte) (output []byte, err error) {
+	cmd := exec.Command("cwebp", "-q", "75", "-o", "-", "--", "-")
+	cmd.Stdin = strings.NewReader(string(input))
+	var o bytes.Buffer
+	cmd.Stdout = &o
+	err = cmd.Run()
+
+	if err != nil {
+		return
+	}
+
+	output = o.Bytes()
+	return
 }
 
 // transformImage modifies the image m based on the transformations specified
